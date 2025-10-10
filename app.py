@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 ROLES = {
     'MANAGER': ['+254743706538'], # Manager (1)
-    'TAILOR': ['+254754597946', '+15555556666'], # Tailors (2)
+    'TAILOR': ['+254754597946', '+14155238886'], # Tailors (2)
     'SALES_GUY': ['+254706350163'] # Sales Guy (1)
 }
 
