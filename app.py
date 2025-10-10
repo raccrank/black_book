@@ -7,9 +7,10 @@ from datetime import datetime, timedelta
 # NOTE: Numbers must be in E.164 format (e.g., '+15551234567')
 
 ROLES = {
-    'MANAGER': ['+254743706538'], # Manager (1)
-    'TAILOR': ['+254754597946', '+14155238886'], # Tailors (2)
-    'SALES_GUY': ['+254706350163'] # Sales Guy (1)
+    'MANAGER' = os.environ.get("MANAGER"), # Manager (1)
+    'TAILOR_1': = os.environ.get("TAILOR_1"),
+    'TAILOR_2': = os.environ.get("TAILOR_2"),
+    'SALES_GUY': os.environ.get("SALES_GUY") # Sales Guy (1)
 }
 
 app = Flask(__name__)
