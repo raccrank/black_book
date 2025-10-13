@@ -123,23 +123,87 @@ def whatsapp_webhook():
     # --------------------------------------------------------------------------------
     
     # --- SALES GUY COMMAND: new (Order Creation with Material Check) ---
-    if command == 'new' and role == 'SALES_GUY':
-        # ... (Existing new logic)
+     if is_menu_choice and command_choice == 1:
+        # Route to Order Creation Step 1
+        resp.message(
+            "📝 *NEW ORDER: START*\n"
+            "Please provide the order details in one message, separating each field with a **pipe symbol (|)**.\n\n"
+            "The expected format is a numbered list:\n"
+            "1. Client Name\n"
+            "2. Garment Type\n"
+            "3. Fabric Type\n"
+            "4. Quantity Needed (e.g., *3m* or *5.5 yards*)\n"
+            "5. Job Out Date (*YYYY-MM-DD*)\n\n"
+            "*Example: John Doe|3 Piece Suit|Wool Cashmere|6.5m|2025-12-15*"
+        )
+        return str(resp)
+
+    elif is_menu_choice and command_choice == 2:
+        # Route to Pending Orders
+        command = 'pending'
+    
+    elif is_menu_choice and command_choice == 3:
+        # Route to Stock Check
+        resp.message("📦 *STOCK CHECK*\nSend `stock [material name]` to check inventory.\nExample: `stock silk` or just `stock` for the full list.")
+        return str(resp)
+        
+    elif is_menu_choice and command_choice == 4:
+        # Route to Query Tool
+        resp.message("🔎 *QUERY TOOL*\nSend `query` for instructions or `query 1,2,5 | status=PENDING` to get results.")
+        return str(resp)
+        
+    # Role-Specific Commands (Menu Options 5+)
+    elif is_menu_choice and command_choice == 5 and role in ['TAILOR_1', 'TAILOR_2']:
+        resp.message("🧵 *START JOB*\nSend `start [ID]` to begin working on an order.")
+        return str(resp)
+
+    elif is_menu_choice and command_choice == 6 and role in ['TAILOR_1', 'TAILOR_2']:
+        resp.message("✅ *COMPLETE JOB*\nSend `complete [ID]` to mark an order as finished.")
+        return str(resp)
+        
+    elif is_menu_choice and command_choice == 5 and role == 'MANAGER':
+        resp.message("🔥 *PRIORITIZE*\nSend `prioritize [Client Name]` to mark orders as urgent, or just `prioritize` to list overdue jobs.")
+        return str(resp)
+        
+    elif is_menu_choice and command_choice == 6 and role in ['MANAGER', 'SALES_GUY']:
+        resp.message("💰 *COLLECTED*\nSend `collected [ID]` to mark an order as paid and picked up.")
+        return str(resp)
+
+    elif is_menu_choice and command_choice == 7 and role in ['MANAGER', 'SALES_GUY']:
+        resp.message("➕ *ADD STOCK*\nSend `addstock [Material] | [Quantity] | [Unit]` to update inventory.\nExample: `addstock Linen | 100 | meters`")
+        return str(resp)
+        
+    # --- END COMMAND ROUTING ---
+    
+    
+    # --- 3. COMMAND LOGIC (Uses the standard text commands for execution) ---
+    
+    # --- ORDER CREATION LOGIC (Handles the actual data submission) ---
+    if command == 'new':
         try:
-            # Expected format: new Name|Garment|Fabric|Qty Needed (e.g., 3m)|Date Out
-            parts = msg[len('new'):].strip().split('|')
+            # 1. Remove the "new" command word
+            content = msg[len('new'):].strip()
+            
+            # 2. Extract parts based on pipe delimiter
+            parts = content.split('|')
             if len(parts) < 5:
-                resp.message("❌ *Command Error*: Missing details. Use: `new [Name] | [Garment] | [Fabric] | [Qty Needed (e.g., 3m)] | [Date Out YYYY-MM-DD]`")
+                # If the user sends a simple 'new' or bad format, return the instructions (Menu Option 1)
+                resp.message(
+                    "❌ *Input Error*: Missing details or incorrect format.\n"
+                    "Use: `new 1. [Name] | 2. [Garment] | 3. [Fabric] | 4. [Qty 3m] | 5. [Date YYYY-MM-DD]`"
+                )
                 return
 
-            client_name = parts[0].strip()
-            garment_type = parts[1].strip()
-            fabric_type = parts[2].strip()
-            quantity_str = parts[3].strip()
-            job_out_date_str = parts[4].strip()
+            # Clean and extract data based on the numbered input structure
+            # Use regex to strip the number/period/space (e.g., '1. John Doe' -> 'John Doe')
+            client_name = re.sub(r"^\s*\d+\.\s*", "", parts[0].strip(), count=1)
+            garment_type = re.sub(r"^\s*\d+\.\s*", "", parts[1].strip(), count=1)
+            fabric_type = re.sub(r"^\s*\d+\.\s*", "", parts[2].strip(), count=1)
+            quantity_str = re.sub(r"^\s*\d+\.\s*", "", parts[3].strip(), count=1)
+            job_out_date_str = re.sub(r"^\s*\d+\.\s*", "", parts[4].strip(), count=1)
 
-            # 1. Parse Quantity (e.g., "3m" -> 3.0, "m")
-            import re # Ensure re is imported at the top
+
+            # A. Parse Quantity (e.g., "3m" -> 3.0, "m")
             match = re.match(r"(\d+(\.\d+)?)\s*([a-zA-Z]+)", quantity_str)
             if not match:
                  resp.message("❌ *Input Error*: Quantity needed must include a number and unit (e.g., '3m', '5.5 yards').")
@@ -148,7 +212,7 @@ def whatsapp_webhook():
             required_qty = float(match.group(1))
             required_unit = match.group(3).lower().strip()
             
-            # --- 2. Material Check, Stock Update, and 'materials_needed' Calculation ---
+            # B. Material Check, Stock Update, and 'materials_needed' Calculation (Same as before)
             conn = get_db_connection()
             materials_to_buy = ""
             
@@ -172,10 +236,10 @@ def whatsapp_webhook():
                 materials_to_buy = f"{required_qty:.1f} {required_unit} of {fabric_type}"
                 stock_status = f"⚠️ **BUY:** {materials_to_buy}"
 
-            # --- 3. Time Estimation (Requires get_time_estimate function to be present) ---
+            # C. Time Estimation (Requires get_time_estimate function to be present)
             estimated_time = get_time_estimate(required_qty)
             
-            # --- 4. Insert New Order ---
+            # D. Insert New Order
             result = conn.execute(
                 """
                 INSERT INTO orders (client_name, garment_type, fabric_type, job_out_date, status, materials_needed, job_in_date) 
@@ -187,24 +251,25 @@ def whatsapp_webhook():
             conn.commit()
             conn.close()
 
-            # --- 5. Generate Receipt/Feedback ---
+            # E. Generate Receipt/Feedback
             receipt_msg = f"🎉 *New Order Created! (ID #{order_id})*\n"
-            receipt_msg += f"👤 **Client:** {client_name}\n"
-            receipt_msg += f"👗 **Garment:** {garment_type} ({required_qty:.1f} {required_unit})\n"
-            receipt_msg += f"🗓️ **Due Date:** {job_out_date_str}\n"
-            receipt_msg += f"⏱️ **Estimated Time:** {estimated_time:.1f} hours\n"
-            receipt_msg += f"📦 **Stock Check:** {stock_status}"
+            receipt_msg += f"👤 *1. Client:* {client_name}\n"
+            receipt_msg += f"👗 *2. Garment:* {garment_type} ({required_qty:.1f} {required_unit})\n"
+            receipt_msg += f"🗓️ *5. Due Date:* {job_out_date_str}\n"
+            receipt_msg += f"⏱️ *Time Estimate:* {estimated_time:.1f} hours\n"
+            receipt_msg += f"📦 *Stock Check:* {stock_status}"
             
             resp.message(receipt_msg)
 
-        except (IndexError, ValueError) as e:
-            resp.message("❌ *Input Error*: Please check the format and ensure quantity has a unit (e.g., 3m) and date is YYYY-MM-DD.")
         except Exception as e:
-            resp.message("❌ *An unexpected error occurred during order creation.*")
+            # Catch all errors and direct back to the instructions
+            resp.message(
+                "❌ *An unexpected error occurred during order creation.* Please re-read the format instructions:\n"
+                "Example: `new 1. John Doe|2. Suit|3. Wool|4. 3m|5. 2025-12-15`"
+            )
         
 
-
-    # --- TAILOR COMMANDS: start, complete (Start/Complete refers to the status change, not the welcome message) ---
+    # --- TAILOR COMMANDS: start, complete ---
     elif command in ['start', 'complete'] and role in ['TAILOR_1', 'TAILOR_2']:
         try:
             order_id = int(msg.split()[1])
@@ -216,9 +281,9 @@ def whatsapp_webhook():
             conn.close()
 
             if new_status == 'COMPLETE':
-                resp.message(f"✂️ *Order #{order_id} complete!* Great work. Sales Guy notified for pickup.")
+                resp.message(f"✂️ *Order #{order_id} complete!* Great work.")
             else:
-                resp.message(f"🧵 *Order #{order_id} is now IN PROGRESS.* Time to get sewing!")
+                resp.message(f"🧵 *Order #{order_id} is now IN PROGRESS.*")
 
         except (IndexError, ValueError):
             resp.message(f"❌ *Command Error*: Please specify the Order ID. E.g., `{command} 101`")
@@ -228,11 +293,13 @@ def whatsapp_webhook():
 
     # --- MANAGER COMMAND: prioritize ---
     elif command == 'prioritize' and role == 'MANAGER':
-        # ... (Existing prioritize logic)
+        # Logic remains the same, just handling the text command now
         try:
             client_name_query = msg[len('prioritize'):].strip()
             conn = get_db_connection()
             
+            # ... (Existing !prioritize logic)
+
             if client_name_query:
                 # 1. Prioritize by client name
                 orders = conn.execute("SELECT id, client_name, status, job_out_date FROM orders WHERE client_name LIKE ? AND status NOT IN ('COMPLETE', 'COLLECTED')", ('%' + client_name_query + '%',)).fetchall()
@@ -303,7 +370,7 @@ def whatsapp_webhook():
             resp.message("❌ *Database Error*: Could not find or update the order.")
             
             
-    # --- STORE SEARCH: stock (TMS) ---
+    # --- STORE SEARCH: stock (Handles both 'stock' and 'stock material') ---
     elif command == 'stock':
         material_query = msg[len('stock'):].strip()
         conn = get_db_connection()
@@ -327,7 +394,7 @@ def whatsapp_webhook():
         conn.close()
         
     
-    # --- ADD STOCK: addstock (Manager / Sales Guy) ---
+    # --- ADD STOCK: addstock (Handles the actual data submission) ---
     elif command == 'addstock' and role in ['MANAGER', 'SALES_GUY']:
         try:
             parts = msg[len('addstock'):].strip().split('|')
@@ -396,7 +463,7 @@ def whatsapp_webhook():
         resp.message(response_msg)
 
 
-    # --- DYNAMIC QUERY TOOL: query (TMS) ---
+    # --- DYNAMIC QUERY TOOL: query (Handles both 'query' and 'query 1,2,5 | status=PENDING') ---
     elif command == 'query':
         DB_COLUMNS = ['id', 'client_name', 'garment_type', 'size', 'color', 'fabric_type', 'job_out_date', 'status', 'materials_needed']
         COLUMN_MAP = {str(i+1): col for i, col in enumerate(DB_COLUMNS)}
@@ -463,47 +530,49 @@ def whatsapp_webhook():
                 
     
     # --------------------------------------------------------------------------------
-    # --- DEFAULT MESSAGE (Combined Welcome/Help for unrecognized commands) ---
+    # --- DEFAULT MESSAGE (The Main Menu) ---
     # --------------------------------------------------------------------------------
     else:
         # 1. Define Role Header
         if role == 'MANAGER':
-            header = "👋 *Welcome, Manager!* Your available commands are listed below:"
+            header = "👋 *Welcome, Manager!* Select an option (e.g., send *1*):"
         elif role in ['TAILOR_1', 'TAILOR_2']:
-            header = f"🧵 *Welcome, Tailor ({role.split('_')[1]})!* Ready to stitch. Here's your quick guide:"
+            header = f"🧵 *Welcome, Tailor ({role.split('_')[1]})!* Select your next action:"
         elif role == 'SALES_GUY':
-            header = "👔 *Welcome, Sales Guy!* Time to move some orders. Use these commands:"
+            header = "👔 *Welcome, Sales Guy!* Select an option below:"
         else:
-            header = "Hello! Send a command from the list below:"
+            header = "Hello! Choose an option by number:"
             
-        help_message = f"{header}\n\n*General Commands:*\n"
+        help_message = f"{header}\n\n*General Functions:*\n"
         
-        # 2. General Commands (for all roles)
-        help_message += "  `pending` - List all active (PENDING/IN PROGRESS) orders.\n"
-        help_message += "  `stock [material]` - Check current inventory (e.g., `stock silk`).\n"
-        help_message += "  `query` - Dynamic database search tool.\n"
+        # General Commands (Accessible to ALL)
+        help_message += "1. **➕ Create New Order** (Enter order details)\n"
+        help_message += "2. **📋 View Pending Jobs**\n"
+        help_message += "3. **📦 Check Store Stock**\n"
+        help_message += "4. **🔎 Run Database Query**\n"
         
-        # 3. Role-Specific Commands
-        if role == 'SALES_GUY':
-            help_message += "\n*Sales Guy Commands:*\n"
-            help_message += "  `new Name|Garment|Fabric|3m|Date` - Create a new order (with stock check).\n"
-            help_message += "  `addstock Material | 50 | meters` - Add inventory to the store.\n"
-            help_message += "  `collected [ID]` - Mark order as collected.\n"
-        
+        # Role-Specific Commands
         if role in ['TAILOR_1', 'TAILOR_2']:
-            help_message += "\n*Tailor Commands:*\n"
-            help_message += "  `start [ID]` - Move an order to 'IN PROGRESS'.\n"
-            help_message += "  `complete [ID]` - Mark an order as 'COMPLETE'.\n"
+            help_message += "\n*Tailor Actions:*\n"
+            help_message += "5. **▶️ Start Job** (Change status to 'IN PROGRESS')\n"
+            help_message += "6. **✅ Complete Job** (Change status to 'COMPLETE')\n"
 
         if role == 'MANAGER':
-            help_message += "\n*Manager Commands:*\n"
-            help_message += "  `prioritize [Name]` - Prioritize orders or list overdue jobs.\n"
-            help_message += "  `addstock Material | 50 | meters` - Add inventory to the store.\n"
-            help_message += "  `collected [ID]` - Mark order as collected.\n"
+            help_message += "\n*Manager Actions:*\n"
+            help_message += "5. **🔥 Prioritize Jobs** (Mark urgent or list overdue)\n"
+            help_message += "6. **💰 Mark as Collected**\n"
+            help_message += "7. **➕ Add Stock**\n"
+
+        if role == 'SALES_GUY':
+            help_message += "\n*Sales Guy Actions:*\n"
+            help_message += "5. **💰 Mark as Collected**\n"
+            help_message += "6. **➕ Add Stock**\n"
+
 
         resp.message(help_message)
 
     return str(resp)
+
 
 if __name__ == "__main__":
     # NOTE: In a production environment like Render, you will use Gunicorn.
