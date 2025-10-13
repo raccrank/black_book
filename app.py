@@ -123,7 +123,7 @@ def whatsapp_webhook():
     # --------------------------------------------------------------------------------
     
     # --- SALES GUY COMMAND: new (Order Creation with Material Check) ---
-     if is_menu_choice and command_choice == 1:
+    if is_menu_choice and command_choice == 1:
         # Route to Order Creation Step 1
         resp.message(
             "📝 *NEW ORDER: START*\n"
