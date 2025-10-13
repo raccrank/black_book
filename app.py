@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 import re
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
@@ -61,14 +61,14 @@ def init_db():
 
 # --- 3. HELPER FUNCTIONS ---
 
-def get_user_role(from_number):
+def get_user_role(from_number: str) -> str:
     """Determines the user's role based on their phone number (E.164 format)."""
     for role, number in ROLES.items():
         if from_number == f"whatsapp:{number}":
             return role
     return 'GUEST'
 
-def get_time_estimate(required_qty_meters):
+def get_time_estimate(required_qty_meters: float) -> float:
     """
     Provides a simple time estimate based on fabric quantity.
     Example: 1 meter = 5 hours
@@ -80,7 +80,7 @@ def get_time_estimate(required_qty_meters):
 # --- 4. FLASK WEBHOOK ROUTE ---
 
 @app.route("/whatsapp", methods=['POST'])
-def whatsapp_webhook():
+def whatsapp_webhook() -> str:
     """Handles incoming WhatsApp messages."""
     msg = request.form.get('Body', '').strip()
     from_number = request.form.get('From')
