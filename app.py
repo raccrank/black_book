@@ -1,106 +1,83 @@
 import os
 import sqlite3
-from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
 from datetime import datetime, timedelta
 import re
+from flask import Flask, request
+from twilio.twiml.messaging_response import MessagingResponse
 
-# --- Configuration: REPLACE THESE PLACEHOLDERS WITH ACTUAL WHATSAPP NUMBERS ---
-# NOTE: Numbers must be in E.164 format (e.g., '+15551234567')
-
+# --- 1. CONFIGURATION (Replace with your actual numbers) ---
+# NOTE: These roles are populated by environment variables on deployment.
+# Example: MANAGER = +12025550100
 ROLES = {
     'MANAGER': os.environ.get("MANAGER"), 
+    'SALES_GUY': os.environ.get("SALES_GUY"), 
     'TAILOR_1': os.environ.get("TAILOR_1"),
     'TAILOR_2': os.environ.get("TAILOR_2"),
-    'SALES_GUY': os.environ.get("SALES_GUY")
 }
 
 app = Flask(__name__)
-DATABASE_NAME = 'orders.db'
+DB_NAME = 'tms.db'
 
-# --- Database Setup ---
+
+# --- 2. DATABASE FUNCTIONS ---
 
 def get_db_connection():
-    conn = sqlite3.connect(DATABASE_NAME)
+    """Establishes a connection to the SQLite database."""
+    conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
+    """Initializes the database structure if it doesn't exist."""
     conn = get_db_connection()
-    
-    # 1. Create/Update Orders Table
-    conn.execute("""
+    cursor = conn.cursor()
+
+    # Create ORDERS table
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_name TEXT NOT NULL,
+            garment_type TEXT NOT NULL,
             fabric_type TEXT,
-            size TEXT,
-            color TEXT,
-            garment_type TEXT,
-            special_notes TEXT,
-            tiktok_link TEXT,
             job_in_date TEXT NOT NULL,
-            job_out_date TEXT,
+            job_out_date TEXT NOT NULL,
             status TEXT NOT NULL,
+            materials_needed TEXT,
             priority_score INTEGER DEFAULT 0
         )
     """)
-    
-    # Add new column for material tracking (if it doesn't exist)
-    try:
-        conn.execute("ALTER TABLE orders ADD COLUMN materials_needed TEXT")
-    except sqlite3.OperationalError as e:
-        if 'duplicate column name' not in str(e):
-            raise
-    
-    # 2. Create Store Inventory Table
-    conn.execute("""
+
+    # Create STORE (Inventory) table
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS store (
-            material TEXT NOT NULL,
+            material TEXT PRIMARY KEY,
             quantity REAL NOT NULL,
-            unit TEXT NOT NULL,
-            UNIQUE(material)
-        );
+            unit TEXT NOT NULL
+        )
     """)
-    
-    # Example insertion for demo if the table is empty
-    if not conn.execute("SELECT 1 FROM store").fetchone():
-        conn.execute("INSERT INTO store (material, quantity, unit) VALUES (?, ?, ?)", ('Silk Taffeta', 50.0, 'meters'))
-        conn.execute("INSERT INTO store (material, quantity, unit) VALUES (?, ?, ?)", ('Cotton Poplin', 120.0, 'yards'))
-    
     conn.commit()
     conn.close()
 
-# Initialize the database on startup
-init_db()
 
-# --- Utility Functions ---
+# --- 3. HELPER FUNCTIONS ---
 
 def get_user_role(from_number):
-    # ROLES contains number strings (e.g., '+15551234567'), so check if number is *in* the string value
-    # NOTE: os.environ.get("MANAGER") could be a single number or a comma-separated list
-    for role, numbers_str in ROLES.items():
-        if numbers_str and from_number in numbers_str.split(','):
+    """Determines the user's role based on their phone number (E.164 format)."""
+    for role, number in ROLES.items():
+        if from_number == f"whatsapp:{number}":
             return role
     return 'GUEST'
 
-def get_time_estimate(required_qty):
-    """Calculates time estimate with an afternoon slowdown penalty."""
-    BASE_TIME_PER_UNIT = 5.0 # Hours per unit of material
-    TOTAL_BASE_TIME = required_qty * BASE_TIME_PER_UNIT
-    
-    current_hour = datetime.now().hour
-    SLOWDOWN_FACTOR = 1.0 
-    
-    # Slowdown logic (example: 20% slowdown after 2 PM)
-    if 14 <= current_hour < 17:
-        SLOWDOWN_FACTOR = 1.2 
-    elif current_hour >= 17 or current_hour < 9:
-        SLOWDOWN_FACTOR = 1.3
-    
-    return TOTAL_BASE_TIME * SLOWDOWN_FACTOR
+def get_time_estimate(required_qty_meters):
+    """
+    Provides a simple time estimate based on fabric quantity.
+    Example: 1 meter = 5 hours
+    """
+    HOURS_PER_METER = 5.0 
+    return required_qty_meters * HOURS_PER_METER
 
-# --- WhatsApp Webhook ---
+
+# --- 4. FLASK WEBHOOK ROUTE ---
 
 @app.route("/whatsapp", methods=['POST'])
 def whatsapp_webhook():
@@ -114,15 +91,21 @@ def whatsapp_webhook():
         resp.message("🚫 *Access Denied*. Your number is not registered for any role.")
         return str(resp)
 
-    # Convert the first word to lowercase for command matching
-    command = msg.lower().split()[0] if msg else ''
+    # 1. Check if the message is a single number response to a menu
+    try:
+        command_choice = int(msg.strip())
+        is_menu_choice = True
+    except ValueError:
+        command_choice = None
+        is_menu_choice = False
+
+    # Get the first word for text command matching (e.g., "new", "start")
+    command = msg.lower().split()[0] if msg and not is_menu_choice else ''
     
     
-    # --------------------------------------------------------------------------------
-    # --- COMMANDS START HERE ---
-    # --------------------------------------------------------------------------------
+    # --- COMMAND ROUTING FROM MENU CHOICE (Sends instructions) ---
     
-    # --- SALES GUY COMMAND: new (Order Creation with Material Check) ---
+    # Universal Commands (Menu Options 1-4)
     if is_menu_choice and command_choice == 1:
         # Route to Order Creation Step 1
         resp.message(
@@ -134,13 +117,13 @@ def whatsapp_webhook():
             "3. Fabric Type\n"
             "4. Quantity Needed (e.g., *3m* or *5.5 yards*)\n"
             "5. Job Out Date (*YYYY-MM-DD*)\n\n"
-            "*Example: John Doe|3 Piece Suit|Wool Cashmere|6.5m|2025-12-15*"
+            "*Example: new 1. John Doe|2. 3 Piece Suit|3. Wool Cashmere|4. 6.5m|5. 2025-12-15*"
         )
         return str(resp)
 
     elif is_menu_choice and command_choice == 2:
         # Route to Pending Orders
-        command = 'pending'
+        command = 'pending' # Triggers the 'pending' logic block below
     
     elif is_menu_choice and command_choice == 3:
         # Route to Stock Check
@@ -173,12 +156,10 @@ def whatsapp_webhook():
         resp.message("➕ *ADD STOCK*\nSend `addstock [Material] | [Quantity] | [Unit]` to update inventory.\nExample: `addstock Linen | 100 | meters`")
         return str(resp)
         
-    # --- END COMMAND ROUTING ---
     
+    # --- COMMAND LOGIC (Executes the text commands like 'new', 'start', etc.) ---
     
-    # --- 3. COMMAND LOGIC (Uses the standard text commands for execution) ---
-    
-    # --- ORDER CREATION LOGIC (Handles the actual data submission) ---
+    # --- NEW ORDER CREATION ---
     if command == 'new':
         try:
             # 1. Remove the "new" command word
@@ -187,15 +168,14 @@ def whatsapp_webhook():
             # 2. Extract parts based on pipe delimiter
             parts = content.split('|')
             if len(parts) < 5:
-                # If the user sends a simple 'new' or bad format, return the instructions (Menu Option 1)
+                # If the user sends a simple 'new' or bad format, return the instructions
                 resp.message(
                     "❌ *Input Error*: Missing details or incorrect format.\n"
-                    "Use: `new 1. [Name] | 2. [Garment] | 3. [Fabric] | 4. [Qty 3m] | 5. [Date YYYY-MM-DD]`"
+                    "Example: `new 1. John Doe|2. Suit|3. Wool|4. 3m|5. 2025-12-15`"
                 )
                 return
 
-            # Clean and extract data based on the numbered input structure
-            # Use regex to strip the number/period/space (e.g., '1. John Doe' -> 'John Doe')
+            # Clean and extract data (strips the number/period/space - e.g., '1. John Doe' -> 'John Doe')
             client_name = re.sub(r"^\s*\d+\.\s*", "", parts[0].strip(), count=1)
             garment_type = re.sub(r"^\s*\d+\.\s*", "", parts[1].strip(), count=1)
             fabric_type = re.sub(r"^\s*\d+\.\s*", "", parts[2].strip(), count=1)
@@ -203,7 +183,7 @@ def whatsapp_webhook():
             job_out_date_str = re.sub(r"^\s*\d+\.\s*", "", parts[4].strip(), count=1)
 
 
-            # A. Parse Quantity (e.g., "3m" -> 3.0, "m")
+            # A. Parse Quantity 
             match = re.match(r"(\d+(\.\d+)?)\s*([a-zA-Z]+)", quantity_str)
             if not match:
                  resp.message("❌ *Input Error*: Quantity needed must include a number and unit (e.g., '3m', '5.5 yards').")
@@ -212,7 +192,7 @@ def whatsapp_webhook():
             required_qty = float(match.group(1))
             required_unit = match.group(3).lower().strip()
             
-            # B. Material Check, Stock Update, and 'materials_needed' Calculation (Same as before)
+            # B. Material Check, Stock Update, and 'materials_needed' Calculation
             conn = get_db_connection()
             materials_to_buy = ""
             
@@ -236,7 +216,7 @@ def whatsapp_webhook():
                 materials_to_buy = f"{required_qty:.1f} {required_unit} of {fabric_type}"
                 stock_status = f"⚠️ **BUY:** {materials_to_buy}"
 
-            # C. Time Estimation (Requires get_time_estimate function to be present)
+            # C. Time Estimation 
             estimated_time = get_time_estimate(required_qty)
             
             # D. Insert New Order
@@ -262,14 +242,13 @@ def whatsapp_webhook():
             resp.message(receipt_msg)
 
         except Exception as e:
-            # Catch all errors and direct back to the instructions
             resp.message(
                 "❌ *An unexpected error occurred during order creation.* Please re-read the format instructions:\n"
                 "Example: `new 1. John Doe|2. Suit|3. Wool|4. 3m|5. 2025-12-15`"
             )
         
 
-    # --- TAILOR COMMANDS: start, complete ---
+    # --- TAILOR STATUS COMMANDS ---
     elif command in ['start', 'complete'] and role in ['TAILOR_1', 'TAILOR_2']:
         try:
             order_id = int(msg.split()[1])
@@ -293,13 +272,10 @@ def whatsapp_webhook():
 
     # --- MANAGER COMMAND: prioritize ---
     elif command == 'prioritize' and role == 'MANAGER':
-        # Logic remains the same, just handling the text command now
         try:
             client_name_query = msg[len('prioritize'):].strip()
             conn = get_db_connection()
             
-            # ... (Existing !prioritize logic)
-
             if client_name_query:
                 # 1. Prioritize by client name
                 orders = conn.execute("SELECT id, client_name, status, job_out_date FROM orders WHERE client_name LIKE ? AND status NOT IN ('COMPLETE', 'COLLECTED')", ('%' + client_name_query + '%',)).fetchall()
@@ -370,7 +346,7 @@ def whatsapp_webhook():
             resp.message("❌ *Database Error*: Could not find or update the order.")
             
             
-    # --- STORE SEARCH: stock (Handles both 'stock' and 'stock material') ---
+    # --- STORE SEARCH: stock ---
     elif command == 'stock':
         material_query = msg[len('stock'):].strip()
         conn = get_db_connection()
@@ -394,7 +370,7 @@ def whatsapp_webhook():
         conn.close()
         
     
-    # --- ADD STOCK: addstock (Handles the actual data submission) ---
+    # --- ADD STOCK ---
     elif command == 'addstock' and role in ['MANAGER', 'SALES_GUY']:
         try:
             parts = msg[len('addstock'):].strip().split('|')
@@ -463,7 +439,7 @@ def whatsapp_webhook():
         resp.message(response_msg)
 
 
-    # --- DYNAMIC QUERY TOOL: query (Handles both 'query' and 'query 1,2,5 | status=PENDING') ---
+    # --- DYNAMIC QUERY TOOL: query ---
     elif command == 'query':
         DB_COLUMNS = ['id', 'client_name', 'garment_type', 'size', 'color', 'fabric_type', 'job_out_date', 'status', 'materials_needed']
         COLUMN_MAP = {str(i+1): col for i, col in enumerate(DB_COLUMNS)}
@@ -529,9 +505,7 @@ def whatsapp_webhook():
                 resp.message(f"❌ *Query Failed*: Ensure your format is correct. Error: {e}")
                 
     
-    # --------------------------------------------------------------------------------
     # --- DEFAULT MESSAGE (The Main Menu) ---
-    # --------------------------------------------------------------------------------
     else:
         # 1. Define Role Header
         if role == 'MANAGER':
@@ -543,7 +517,7 @@ def whatsapp_webhook():
         else:
             header = "Hello! Choose an option by number:"
             
-        help_message = f"{header}\n\n*General Functions:*\n"
+        help_message = f"{header}\n\n*General Functions (All Roles):*\n"
         
         # General Commands (Accessible to ALL)
         help_message += "1. **➕ Create New Order** (Enter order details)\n"
@@ -574,7 +548,11 @@ def whatsapp_webhook():
     return str(resp)
 
 
+# --- 5. RUN APPLICATION ---
+
 if __name__ == "__main__":
-    # NOTE: In a production environment like Render, you will use Gunicorn.
-    # The start command for Gunicorn will be 'gunicorn app:app'
-    app.run(debug=True)
+    # Initialize the database file when the app starts
+    init_db() 
+    # NOTE: In a production environment (like Render/Heroku), you would use a 
+    # WSGI server (like Gunicorn) and ensure environment variables are set.
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
