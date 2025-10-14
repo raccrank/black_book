@@ -154,12 +154,12 @@ def whatsapp_webhook() -> str:
         
     # Role-Specific Commands (Menu Options 5+)
     elif is_menu_choice and command_choice == 5 and role in ['TAILOR_1', 'TAILOR_2']:
-        resp.message("🧵 *START JOB*\nSend `start [ID]` to begin working on an order.")
-        return str(resp)
-
-    elif is_menu_choice and command_choice == 6 and role in ['TAILOR_1', 'TAILOR_2']:
-        resp.message("✅ *COMPLETE JOB*\nSend `complete [ID]` to mark an order as finished.")
-        return str(resp)
+    resp.message(
+        "🧵 *JOB ACTIONS*\n"
+        "▶️ Send `start [ID]` to begin working (Status: IN PROGRESS).\n"
+        "✅ Send `complete [ID]` to mark an order as finished (Status: COMPLETE)."
+    )
+    return str(resp)
         
     elif is_menu_choice and command_choice == 5 and role == 'MANAGER':
         resp.message("🔥 *PRIORITIZE*\nSend `prioritize [Client Name]` to mark orders as urgent, or just `prioritize` to list overdue jobs.")
@@ -270,10 +270,10 @@ def whatsapp_webhook() -> str:
         
 
     # --- TAILOR STATUS COMMANDS ---
-    elif command in ['start', 'complete'] and role in ['TAILOR_1', 'TAILOR_2']:
-        try:
-            order_id = int(msg.split()[1])
-            new_status = 'IN PROGRESS' if command == 'start' else 'COMPLETE'
+    elif command in ['start', 'complete'] and role != 'GUEST': 
+    try:
+        order_id = int(msg.split()[1])
+        new_status = 'IN PROGRESS' if command == 'start' else 'COMPLETE'
             
             conn = get_db_connection()
             conn.execute("UPDATE orders SET status = ? WHERE id = ?", (new_status, order_id))
