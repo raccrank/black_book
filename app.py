@@ -9,10 +9,10 @@ from twilio.twiml.messaging_response import MessagingResponse
 # NOTE: These roles are populated by environment variables on deployment.
 # Example: MANAGER = +12025550100
 ROLES = {
-    'MANAGER':= os.environ.get("MANAGER"), 
-    'SALES_GUY':= os.environ.get("SALES_GUY"), 
-    'TAILOR_1':= os.environ.get("TAILOR_1"),
-    'TAILOR_2':= os.environ.get("TAILOR_2"),
+    'MANAGER': os.environ.get("MANAGER"), 
+    'SALES_GUY': os.environ.get("SALES_GUY"), 
+    'TAILOR_1': os.environ.get("TAILOR_1"),
+    'TAILOR_2': os.environ.get("TAILOR_2"),
 }
 
 app = Flask(__name__)
