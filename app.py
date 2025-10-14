@@ -528,6 +528,7 @@ def whatsapp_webhook() -> str:
                     resp.message("No orders found matching your criteria.")
 
             except Exception as e:
+                resp.message(f"❌ *Query Error*: {e}")
     else:
         # 1. Define Role Header
         if role == 'MANAGER':
