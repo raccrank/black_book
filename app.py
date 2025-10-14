@@ -101,6 +101,10 @@ def whatsapp_webhook() -> str:
     """Handles incoming WhatsApp messages."""
     msg = request.form.get('Body', '').strip()
     from_number = request.form.get('From')
+    if from_number is None:
+        resp = MessagingResponse()
+        resp.message("🚫 *Access Denied*. No sender number found.")
+        return str(resp)
     role = get_user_role(from_number)
     resp = MessagingResponse()
 
@@ -149,17 +153,13 @@ def whatsapp_webhook() -> str:
         
     elif is_menu_choice and command_choice == 4:
         # Route to Query Tool
-        resp.message("🔎 *QUERY TOOL*\nSend `query` for instructions or `query 1,2,5 | status=PENDING` to get results.")
-        return str(resp)
-        
-    # Role-Specific Commands (Menu Options 5+)
     elif is_menu_choice and command_choice == 5 and role in ['TAILOR_1', 'TAILOR_2']:
         resp.message(
-        "🧵 *JOB ACTIONS*\n"
-        "▶️ Send `start [ID]` to begin working (Status: IN PROGRESS).\n"
-        "✅ Send `complete [ID]` to mark an order as finished (Status: COMPLETE)."
-    )
-    return str(resp)
+            "🧵 *JOB ACTIONS*\n"
+            "▶️ Send `start [ID]` to begin working (Status: IN PROGRESS).\n"
+            "✅ Send `complete [ID]` to mark an order as finished (Status: COMPLETE)."
+        )
+        return str(resp)
         
     elif is_menu_choice and command_choice == 5 and role == 'MANAGER':
         resp.message("🔥 *PRIORITIZE*\nSend `prioritize [Client Name]` to mark orders as urgent, or just `prioritize` to list overdue jobs.")
@@ -167,6 +167,10 @@ def whatsapp_webhook() -> str:
         
     elif is_menu_choice and command_choice == 6 and role in ['MANAGER', 'SALES_GUY']:
         resp.message("💰 *COLLECTED*\nSend `collected [ID]` to mark an order as paid and picked up.")
+        return str(resp)
+
+    elif is_menu_choice and command_choice == 7 and role in ['MANAGER', 'SALES_GUY']:
+        resp.message("➕ *ADD STOCK*\nSend `addstock [Material] | [Quantity] | [Unit]` to update inventory.\nExample: `addstock Linen | 100 | meters`")
         return str(resp)
 
     elif is_menu_choice and command_choice == 7 and role in ['MANAGER', 'SALES_GUY']:
@@ -266,14 +270,10 @@ def whatsapp_webhook() -> str:
             resp.message(
                 "❌ *An unexpected error occurred during order creation.* Please re-read the format instructions:\n"
                 "Example: `new 1. John Doe|2. Suit|3. Wool|4. 3m|5. 2025-12-15`"
-            )
-        
-
-    # --- TAILOR STATUS COMMANDS ---
     elif command in ['start', 'complete'] and role != 'GUEST': 
-    try:
-        order_id = int(msg.split()[1])
-        new_status = 'IN PROGRESS' if command == 'start' else 'COMPLETE'
+        try:
+            order_id = int(msg.split()[1])
+            new_status = 'IN PROGRESS' if command == 'start' else 'COMPLETE'
             
             conn = get_db_connection()
             conn.execute("UPDATE orders SET status = ? WHERE id = ?", (new_status, order_id))
@@ -285,6 +285,10 @@ def whatsapp_webhook() -> str:
             else:
                 resp.message(f"🧵 *Order #{order_id} is now IN PROGRESS.*")
 
+        except (IndexError, ValueError):
+            resp.message(f"❌ *Command Error*: Please specify the Order ID. E.g., `{command} 101`")
+        except sqlite3.Error:
+            resp.message("❌ *Database Error*: Could not find or update the order.")
         except (IndexError, ValueError):
             resp.message(f"❌ *Command Error*: Please specify the Order ID. E.g., `{command} 101`")
         except sqlite3.Error:
@@ -523,10 +527,6 @@ def whatsapp_webhook() -> str:
                     resp.message("No orders found matching your criteria.")
 
             except Exception as e:
-                resp.message(f"❌ *Query Failed*: Ensure your format is correct. Error: {e}")
-                
-    
-    # --- DEFAULT MESSAGE (The Main Menu) ---
     else:
         # 1. Define Role Header
         if role == 'MANAGER':
@@ -563,6 +563,9 @@ def whatsapp_webhook() -> str:
             help_message += "5. **💰 Mark as Collected**\n"
             help_message += "6. **➕ Add Stock**\n"
 
+        resp.message(help_message)
+
+    return str(resp)
 
         resp.message(help_message)
 
