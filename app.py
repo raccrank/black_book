@@ -61,11 +61,28 @@ def init_db():
 
 # --- 3. HELPER FUNCTIONS ---
 
+# --- 3. HELPER FUNCTIONS (FIXED) ---
+
 def get_user_role(from_number: str) -> str:
-    """Determines the user's role based on their phone number (E.164 format)."""
+    """
+    Determines the user's role based on their phone number.
+    
+    The incoming 'from_number' from Twilio starts with 'whatsapp:'.
+    The numbers stored in the 'ROLES' dictionary also start with 'whatsapp:'.
+    """
+    # 1. Strip the 'whatsapp:' prefix from the incoming message number 
+    # to get the clean +E.164 number.
+    clean_from_number = from_number.replace("whatsapp:", "")
+    
+    # 2. Iterate through roles and check if the clean number matches
+    # the number stored in the ROLES dictionary (which contains 'whatsapp:+E.164')
     for role, number in ROLES.items():
-        if from_number == f"whatsapp:{number}":
+        # Clean the stored number as well, to ensure a clean +E.164 vs clean +E.164 comparison
+        clean_stored_number = number.replace("whatsapp:", "") if number else None
+        
+        if clean_from_number == clean_stored_number:
             return role
+            
     return 'GUEST'
 
 def get_time_estimate(required_qty_meters: float) -> float:
@@ -166,6 +183,13 @@ def whatsapp_webhook() -> str:
             content = msg[len('new'):].strip()
             
             # 2. Extract parts based on pipe delimiter
+            # --- NEW ORDER CREATION (Fixed Snippet) ---
+    if command == 'new':
+        try:
+            # 1. Remove the "new" command word
+            content = msg[len('new'):].strip()
+            
+            # 2. Extract parts based on pipe delimiter
             parts = content.split('|')
             if len(parts) < 5:
                 # If the user sends a simple 'new' or bad format, return the instructions
@@ -173,7 +197,10 @@ def whatsapp_webhook() -> str:
                     "❌ *Input Error*: Missing details or incorrect format.\n"
                     "Example: `new 1. John Doe|2. Suit|3. Wool|4. 3m|5. 2025-12-15`"
                 )
-                return
+                return str(resp) # <-- FIXED!
+
+            # Clean and extract data...
+# ...
 
             # Clean and extract data (strips the number/period/space - e.g., '1. John Doe' -> 'John Doe')
             client_name = re.sub(r"^\s*\d+\.\s*", "", parts[0].strip(), count=1)
