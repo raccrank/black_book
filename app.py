@@ -152,6 +152,7 @@ def whatsapp_webhook() -> str:
         return str(resp)
         
     elif is_menu_choice and command_choice == 4:
+        pass
         # Route to Query Tool
     elif is_menu_choice and command_choice == 5 and role in ['TAILOR_1', 'TAILOR_2']:
         resp.message(
