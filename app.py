@@ -154,7 +154,7 @@ def whatsapp_webhook() -> str:
         
     # Role-Specific Commands (Menu Options 5+)
     elif is_menu_choice and command_choice == 5 and role in ['TAILOR_1', 'TAILOR_2']:
-    resp.message(
+        resp.message(
         "🧵 *JOB ACTIONS*\n"
         "▶️ Send `start [ID]` to begin working (Status: IN PROGRESS).\n"
         "✅ Send `complete [ID]` to mark an order as finished (Status: COMPLETE)."
