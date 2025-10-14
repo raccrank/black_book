@@ -569,11 +569,6 @@ def whatsapp_webhook() -> str:
 
     return str(resp)
 
-        resp.message(help_message)
-
-    return str(resp)
-
-
 # --- 5. RUN APPLICATION ---
 
 if __name__ == "__main__":
