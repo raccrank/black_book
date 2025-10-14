@@ -270,7 +270,7 @@ def whatsapp_webhook() -> str:
         except Exception as e:
             resp.message(
                 "❌ *An unexpected error occurred during order creation.* Please re-read the format instructions:\n"
-                "Example: `new 1. John Doe|2. Suit|3. Wool|4. 3m|5. 2025-12-15`"
+                "Example: `new 1. John Doe|2. Suit|3. Wool|4. 3m|5. 2025-12-15`")
     elif command in ['start', 'complete'] and role != 'GUEST': 
         try:
             order_id = int(msg.split()[1])
