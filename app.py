@@ -177,13 +177,7 @@ def whatsapp_webhook() -> str:
     # --- COMMAND LOGIC (Executes the text commands like 'new', 'start', etc.) ---
     
     # --- NEW ORDER CREATION ---
-    if command == 'new':
-        try:
-            # 1. Remove the "new" command word
-            content = msg[len('new'):].strip()
-            
-            # 2. Extract parts based on pipe delimiter
-            # --- NEW ORDER CREATION (Fixed Snippet) ---
+   
     if command == 'new':
         try:
             # 1. Remove the "new" command word
